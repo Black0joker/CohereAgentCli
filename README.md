@@ -43,6 +43,21 @@ pip install cohere
 
 ## Setup
 
+### 1. Get your Cohere API key
+
+You need a Cohere account first:
+
+1. Register a free account at
+   <https://dashboard.cohere.com/welcome/register>.
+2. After signing in, open the **API Keys** page in the dashboard
+   (<https://dashboard.cohere.com/api-keys>) and create a **Trial key**.
+3. Copy the generated key (it starts with `cohere_`).
+
+Trial keys are free and limited to 20 API calls/minute; the agent handles
+the resulting 429 responses automatically by waiting for the next window.
+
+### 2. Configure the project
+
 1. Copy the example env file:
 
    ```bash
@@ -54,9 +69,6 @@ pip install cohere
    ```
    COHERE_API_KEY=cohere_xxxxxxxxxxxxxxxxxxxxxxxx
    ```
-
-   Trial keys are limited to 20 API calls/minute; the agent handles the 429
-   responses automatically by waiting for the next window.
 
 ## Usage
 
