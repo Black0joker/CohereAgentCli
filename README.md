@@ -125,3 +125,11 @@ Each file has a single responsibility:
      `tool_dispatch`, then displayed with an outcome summary; the results are
      appended as `tool` messages and the loop continues.
 3. The turn ends with a token-usage summary and everything is logged.
+
+## Support
+
+If you run into any issues with the agent CLI (bugs, unexpected behavior,
+setup problems), contact me on Telegram: **[@Warriorx0](https://t.me/Warriorx0)**.
+
+Please include a short description of the problem and, if possible, the
+relevant lines from `logs/agent.log` - that makes debugging much faster.
