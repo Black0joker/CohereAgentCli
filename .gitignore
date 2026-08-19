@@ -7,9 +7,6 @@ chats/
 # Agent logs
 logs/
 
-# Reference/source modules (not part of CLI)
-module.py
-
 # Python
 __pycache__/
 *.py[cod]
