@@ -1,0 +1,32 @@
+# Environment
+.env
+
+# Saved chat sessions
+chats/
+
+# Agent logs
+logs/
+
+# Reference/source modules (not part of CLI)
+module.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
