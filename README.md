@@ -1,3 +1,7 @@
+> ⚠️ **Cohere models are useless and they are very stupid in reasoning and tools calling.**
+
+---
+
 # CohereAgentCli
 
 A small autonomous coding agent CLI powered by **Cohere Command** (`chat_stream`
