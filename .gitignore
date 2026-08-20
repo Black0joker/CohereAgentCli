@@ -8,6 +8,10 @@ chats/
 # Agent logs
 logs/
 
+# PyInstaller artifacts
+build/
+dist/
+
 # Python
 __pycache__/
 *.py[cod]

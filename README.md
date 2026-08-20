@@ -122,6 +122,17 @@ git-ignored) and survive restarts. Slash commands manage them:
 Chat history (including tool calls/results) is stored verbatim except the system prompt,
 which is re-injected on load.
 
+## Building a standalone exe
+
+```bash
+python -m PyInstaller agent.spec --noconfirm
+```
+
+Produces `dist/agent.exe` (one-file console app). Put `tokens.json` NEXT TO the
+exe - credentials are loaded from the exe's own directory regardless of the
+working directory. The agent's workspace is still the directory it is launched
+from, so `cd` where you want it to work and run the exe from there.
+
 ## Project structure
 
 Each file has a single responsibility:
@@ -130,6 +141,7 @@ Each file has a single responsibility:
 |---|---|
 | `agent.py` | CLI entry point: bootstrap + interactive REPL + chat commands |
 | `chat_store.py` | Chat session persistence: create / list / load / save / remove (`chats/*.json`) |
+| `agent.spec` | PyInstaller build spec for the standalone `dist/agent.exe` |
 | `config.py` | Configuration constants (model, tokens file, rotation budget, client timeout) |
 | `token_manager.py` | `tokens.json` loading + credential rotation every 18 requests |
 | `system_prompt.py` | OS-aware system prompt (Windows / Linux / macOS) |

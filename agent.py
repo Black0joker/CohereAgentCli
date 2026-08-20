@@ -134,7 +134,20 @@ def _handle_command(line: str, messages: list, current_chat: str):
     return messages, current_chat
 
 
+def _force_utf8_stdio() -> None:
+    """Model output routinely contains non-ASCII (emoji, unicode box chars).
+    On consoles/pipes whose encoding can't hold them (e.g. cp1252 on
+    Windows, including the frozen exe) printing would crash the turn -
+    force UTF-8 instead."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
+
+
 def main() -> None:
+    _force_utf8_stdio()
     # All diagnostics go to logs/agent.log; the console stays clean.
     log = setup_logging()
     log.info("session start | model=%s | workspace=%s", MODEL, os.getcwd())
