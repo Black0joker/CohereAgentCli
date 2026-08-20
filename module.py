@@ -139,6 +139,7 @@ def _execute_subprocess(command: str, parsed_cmd, first_cmd: str, cwd: str, time
             text=True,
             timeout=timeout,
             cwd=cwd,
+            input="",
         )
     return subprocess.run(
         ["powershell", "-Command", command],
@@ -146,6 +147,7 @@ def _execute_subprocess(command: str, parsed_cmd, first_cmd: str, cwd: str, time
         text=True,
         timeout=timeout,
         cwd=cwd,
+        input="",
     )
 
 
@@ -179,6 +181,7 @@ def _run_background_process(proc_id: str, command: str, parsed_cmd, first_cmd: s
                 parsed_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
+                stdin=subprocess.PIPE,
                 text=True,
                 cwd=cwd,
             )
@@ -187,9 +190,14 @@ def _run_background_process(proc_id: str, command: str, parsed_cmd, first_cmd: s
                 ["powershell", "-Command", command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
+                stdin=subprocess.PIPE,
                 text=True,
                 cwd=cwd,
             )
+        # Close stdin immediately so commands that read from stdin get EOF
+        # instead of hanging (an empty pipe delivers EOF; on Windows
+        # subprocess.DEVNULL does not for e.g. 'python -').
+        proc.stdin.close()
 
         # Store the process object for external status checking / kill
         with _state_lock:
@@ -375,6 +383,7 @@ def _handle_code_interpreter(arguments: dict) -> dict:
             text=True,
             timeout=timeout,
             cwd=CURRENT_PATH,
+            input="",
         )
         return {
             "status": "success",
