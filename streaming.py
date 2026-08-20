@@ -196,7 +196,10 @@ def _consume_once(co, messages: list, allow_tools: bool = True):
     usage = {}                     # filled from the message-end event
     finish_reason = None
 
-    stream_kwargs = {"model": MODEL, "messages": messages}
+    stream_kwargs = {"model": MODEL
+                     , "messages": messages
+                     ,"thinking":{"type": "enabled"}
+                     ,"temperature":0.6}
     if allow_tools:
         stream_kwargs["tools"] = COHERE_TOOLS
     try:
