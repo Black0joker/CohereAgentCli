@@ -1,0 +1,10 @@
+[
+  {
+    "token": "your_cohere_api_key_here",
+    "apiUrl": ""
+  },
+  {
+    "token": "another_cohere_api_key_here",
+    "apiUrl": "https://your-proxy.example.com/"
+  }
+]

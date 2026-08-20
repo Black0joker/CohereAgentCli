@@ -144,10 +144,6 @@ def tool_end(name: str, result_str: str, elapsed: float) -> None:
         print(f"    {RED}{BOLD}{G['fail']}{RESET} {RED}{summary}{RESET} {timing}", flush=True)
 
 
-def fallback_answer(text: str) -> None:
-    print(f"{agent_prefix()}{text}")
-
-
 def turn_usage(usage: dict) -> None:
     """Compact token-consumption summary at the end of a turn."""
     if not usage:

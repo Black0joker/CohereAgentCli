@@ -3,8 +3,8 @@
 Single responsibility: bootstrap the agent and run the interactive REPL.
 All other concerns live in dedicated single-responsibility modules:
 
-  config.py         - configuration constants (model, step budget, env file)
-  env_loader.py     - .env parsing (COHERE_API_KEY)
+  config.py         - configuration constants (model, step budget, tokens file, rotation)
+  token_manager.py  - tokens.json loading + credential rotation (every 18 requests)
   system_prompt.py  - the Warriorx-mindset system prompt
   tool_schemas.py   - Cohere function-calling tool schemas
   tool_engine.py    - adapter for the shared tool engine (module.py)
@@ -21,15 +21,13 @@ Run:  python agent.py
 import os
 import sys
 
-import cohere
-
 import ui
 
 from agent_loop import run_turn
 from config import MODEL
-from env_loader import load_env
 from logger import setup_logging
 from system_prompt import SYSTEM_PROMPT
+from token_manager import TokenConfigError, load_tokens, summary as credentials_summary
 from tool_engine import set_workspace
 
 
@@ -38,16 +36,19 @@ def main() -> None:
     log = setup_logging()
     log.info("session start | model=%s | workspace=%s", MODEL, os.getcwd())
 
-    api_key = load_env().get("COHERE_API_KEY") or os.environ.get("COHERE_API_KEY")
-    if not api_key:
-        log.critical("COHERE_API_KEY not found in .env or environment")
-        ui.error_message("COHERE_API_KEY not found in .env or environment.")
+    try:
+        load_tokens()
+    except TokenConfigError as e:
+        log.critical("credential config error: %s", e)
+        ui.error_message(str(e))
         sys.exit(1)
+    log.info("credentials: %s", credentials_summary())
 
     # Pin the tool engine's workspace to the directory this agent runs in.
     set_workspace(os.getcwd())
 
-    co = cohere.ClientV2(api_key=api_key)
+    # The Cohere client lives in token_manager: it is (re)built per active
+    # {token, apiUrl} entry and rotated every REQUESTS_PER_TOKEN API calls.
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     ui.banner(MODEL, os.getcwd())
@@ -72,7 +73,7 @@ def main() -> None:
 
         try:
             # run_turn streams the final answer to stdout as it arrives
-            run_turn(co, messages)
+            run_turn(messages)
         except KeyboardInterrupt:
             ui.farewell("[interrupted]")
             log.warning("turn interrupted by user")

@@ -24,6 +24,11 @@ Run it with: `python agent.py`
 - **Rate-limit handling** - on HTTP 429 the agent waits out the full
   one-minute trial-key window (or honors `Retry-After`) and retries; other
   transient errors (5xx, network) use capped exponential backoff.
+- **Credential rotation** - credentials live in `tokens.json` as
+  `[{token, apiUrl}]` entries; the agent rotates to the next entry after
+  every 18 API calls, and immediately when a call fails (e.g. a 429 rate
+  limit or a request exceeding the 5-second client timeout), retrying with
+  fresh credentials before falling back to waiting.
 - **Retry discipline** - identical retries of failed tool calls are flagged
   with the original error plus a directive to change strategy.
 - **Small-talk routing** - greetings and chit-chat skip tool schemas entirely.
@@ -58,17 +63,24 @@ the resulting 429 responses automatically by waiting for the next window.
 
 ### 2. Configure the project
 
-1. Copy the example env file:
+1. Copy the example credentials file:
 
    ```bash
-   cp .env_example .env
+   cp tokens_example.json tokens.json
    ```
 
-2. Put your API key in `.env` (never commit this file - it is git-ignored):
+2. Put one or more API keys in `tokens.json` (never commit this file - it
+   is git-ignored). Each entry is a `{token, apiUrl}` pair; leave `apiUrl`
+   empty to use the official Cohere endpoint:
 
+   ```json
+   [
+     {"token": "cohere_xxxxxxxxxxxxxxxxxxxxxxxx", "apiUrl": ""},
+     {"token": "cohere_yyyyyyyyyyyyyyyyyyyyyyyy", "apiUrl": "https://your-proxy.example.com/"}
+   ]
    ```
-   COHERE_API_KEY=cohere_xxxxxxxxxxxxxxxxxxxxxxxx
-   ```
+
+   The agent rotates to the next entry after every 18 API requests.
 
 ## Usage
 
@@ -101,8 +113,8 @@ Each file has a single responsibility:
 | File | Responsibility |
 |---|---|
 | `agent.py` | CLI entry point: bootstrap + interactive REPL |
-| `config.py` | Configuration constants (model, step limit, env file) |
-| `env_loader.py` | `.env` parsing (`COHERE_API_KEY`) |
+| `config.py` | Configuration constants (model, tokens file, rotation budget, client timeout) |
+| `token_manager.py` | `tokens.json` loading + credential rotation every 18 requests |
 | `system_prompt.py` | OS-aware system prompt (Windows / Linux / macOS) |
 | `tool_schemas.py` | The 15 Cohere function-calling tool schemas |
 | `tool_engine.py` | Adapter for `module.py` (logger injection, workspace pinning) |
@@ -113,11 +125,14 @@ Each file has a single responsibility:
 | `agent_loop.py` | The multi-step tool-use loop (`run_turn`) |
 | `ui.py` | Colors and appearance for all console output |
 | `logger.py` | File-only rotating logging (`logs/agent.log`) |
+| `API/flask_gateway.py` | Optional SSE proxy: forwards `/v2/chat` to the Cohere API (host it on any provider, point `apiUrl` at it) |
+| `API/requirements.txt` | Proxy dependencies (flask, requests, gunicorn) |
+| `API/DEPLOY.md` | Hosting instructions for the proxy (local / PythonAnywhere / Render / Railway / Fly) |
 
 ## How a turn works
 
 1. `agent.py` reads your input and appends it to the conversation.
-2. `agent_loop.run_turn` loops (up to `config.MAX_STEPS`):
+2. `agent_loop.run_turn` loops until the model produces a final answer:
    - `streaming.consume_stream` calls the API (with retry/backoff), streams
      thinking + answer text, and collects tool plans and tool calls.
    - No tool calls? The streamed text is the final answer.
@@ -125,6 +140,27 @@ Each file has a single responsibility:
      `tool_dispatch`, then displayed with an outcome summary; the results are
      appended as `tool` messages and the loop continues.
 3. The turn ends with a token-usage summary and everything is logged.
+
+## API proxy (optional)
+
+`API/flask_gateway.py` is a small Flask server that relays `POST /v2/chat`
+requests to `https://api.cohere.com/v2/chat`, streaming the SSE response
+back to the caller. Host it on any provider and point a `tokens.json`
+entry's `apiUrl` at it - the Cohere SDK automatically calls
+`{apiUrl}/v2/chat`, so no agent changes are needed.
+
+Run it locally:
+
+```bash
+pip install -r API/requirements.txt
+python API/flask_gateway.py   # serves on 0.0.0.0:8000
+```
+
+Then add an entry like
+`{"token": "cohere_...", "apiUrl": "http://127.0.0.1:8000"}` to
+`tokens.json`. The gateway also exposes `GET /health` for provider
+liveness probes. See `API/DEPLOY.md` for provider-specific hosting
+instructions (PythonAnywhere, Render, Railway, Fly.io).
 
 ## Support
 

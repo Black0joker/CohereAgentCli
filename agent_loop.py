@@ -2,7 +2,7 @@
 
 Single responsibility: orchestrate one user turn - stream model responses,
 execute requested tools, replay results, apply Warriorx retry discipline,
-and stop at the final answer or the step budget.
+and stop only when the model produces a final answer (no step limit).
 """
 
 import json
@@ -10,7 +10,6 @@ import time
 
 import ui
 
-from config import MAX_STEPS
 from logger import get_logger
 from small_talk import is_conversational
 from streaming import consume_stream
@@ -19,7 +18,7 @@ from tool_dispatch import dispatch_tool, inject_retry_guidance, is_error_result
 log = get_logger("loop")
 
 
-def run_turn(co, messages: list) -> str:
+def run_turn(messages: list) -> str:
     """Run one user turn with streaming: loop tool calls until the model
     produces a final answer (streamed to stdout as it arrives).
 
@@ -54,9 +53,11 @@ def run_turn(co, messages: list) -> str:
             usage_total.get("cached_tokens", 0),
         )
 
-    for step in range(1, MAX_STEPS + 1):
+    step = 0
+    while True:
+        step += 1
         text, plan, tool_calls, usage = consume_stream(
-            co, messages,
+            messages,
             # small talk: omit the tool schemas entirely so tool calls are impossible
             allow_tools=allow_tools if step == 1 else True,
         )
@@ -138,11 +139,3 @@ def run_turn(co, messages: list) -> str:
                 "tool_call_id": tc["id"],
                 "content": result_str,
             })
-
-    # Step budget exhausted
-    log.warning("step budget exhausted (%d steps) without a final answer", MAX_STEPS)
-    fallback = "Reached the maximum number of tool steps without a final answer. Please refine the request."
-    messages.append({"role": "assistant", "content": fallback})
-    ui.fallback_answer(fallback)
-    _report_usage(MAX_STEPS)
-    return fallback

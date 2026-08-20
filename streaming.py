@@ -7,10 +7,16 @@ tool calls. No orchestration logic.
 
 import time
 
+import httpx
+
 import ui
 
 from config import MODEL
 from logger import get_logger
+from token_manager import (
+    active_index, entry_count, get_client, note_request, note_success,
+    rotate_on_error,
+)
 from tool_schemas import COHERE_TOOLS
 
 log = get_logger("streaming")
@@ -31,7 +37,7 @@ def attr(obj, name, default=None):
 # every retry is logged and the user sees one short notice.
 # ---------------------------------------------------------------------------
 
-RETRY_MAX_ATTEMPTS = 6     # total attempts per model call (1 + 5 retries)
+RETRY_MAX_ATTEMPTS = 6     # max wait-based retries once every credential entry failed
 RETRY_BASE_DELAY = 2.0     # seconds, doubles per retry (5xx / network)
 RETRY_MAX_DELAY = 60.0     # cap for any single backoff wait
 RATE_LIMIT_WAIT = 61.0     # trial keys allow 20 calls/MINUTE -> wait out the
@@ -39,15 +45,22 @@ RATE_LIMIT_WAIT = 61.0     # trial keys allow 20 calls/MINUTE -> wait out the
 
 
 def _is_retryable(exc: Exception) -> bool:
-    """True for rate limits, server errors, and network-level failures."""
+    """True for rate limits, server errors, timeouts, and network failures."""
     status = getattr(exc, "status_code", None)
     if isinstance(status, int) and (status == 429 or status >= 500):
         return True
     if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
         return True
+    # httpx transport errors (ReadTimeout/ConnectTimeout/etc., connect/read
+    # failures). httpx.TimeoutException is NOT a subclass of the builtin
+    # TimeoutError/OSError, so it must be caught explicitly - otherwise a
+    # client timeout would crash the turn instead of rotating credentials.
+    if isinstance(exc, httpx.TransportError):
+        return True
     return type(exc).__name__ in (
         "TooManyRequestsError", "InternalServerError",
         "ServiceUnavailableError", "GatewayTimeoutError",
+        "ReadTimeout", "ConnectTimeout", "TimeoutException",
     )
 
 
@@ -77,38 +90,69 @@ def _retry_delay_seconds(exc: Exception, attempt: int) -> float:
     return min(RETRY_BASE_DELAY * (2 ** (attempt - 1)), RETRY_MAX_DELAY)
 
 
-def consume_stream(co, messages: list, allow_tools: bool = True):
-    """Call chat_stream with retries and accumulate the streamed response.
+def consume_stream(messages: list, allow_tools: bool = True):
+    """Call chat_stream with credential rotation and retries.
 
-    Retries transient errors (429 / 5xx / network) with bounded exponential
-    backoff. Streams the final-answer text to stdout as it arrives.
+    The client is obtained from token_manager on every attempt, so budget
+    rotation (every REQUESTS_PER_TOKEN API calls) applies even mid-turn.
+    On a retryable error (429 / 5xx / network) the agent rotates to the
+    next {token, apiUrl} entry and retries IMMEDIATELY - no waiting - as
+    long as a fresh entry exists. Only when every entry has failed since
+    the last success does it fall back to waiting (rate-limit window /
+    capped exponential backoff, bounded by RETRY_MAX_ATTEMPTS). Streams
+    the final-answer text to stdout as it arrives.
 
     Returns (text, tool_plan, tool_calls, usage) where tool_calls is a list
     of dicts {"id", "type", "function": {"name", "arguments"}} and usage
     holds the token counts from the message-end event.
     """
-    for attempt in range(1, RETRY_MAX_ATTEMPTS + 1):
+    wait_attempts = 0
+    while True:
         try:
-            return _consume_once(co, messages, allow_tools)
+            # Count the request first: when the active entry's budget is
+            # exhausted this rotates to the next {token, apiUrl} entry, and
+            # get_client() then builds the client for that fresh entry.
+            note_request()
+            co = get_client()
+            result = _consume_once(co, messages, allow_tools)
+            note_success()
+            return result
         except Exception as exc:
-            if not _is_retryable(exc) or attempt >= RETRY_MAX_ATTEMPTS:
+            if not _is_retryable(exc):
                 raise
-            delay = _retry_delay_seconds(exc, attempt)
+            # Error-triggered rotation: a fresh credential entry is retried
+            # immediately (no waiting). Only after every entry has failed
+            # does the agent wait out a delay before retrying.
+            if rotate_on_error():
+                log.warning(
+                    "retryable API error %s - rotated to credential entry %d/%d, "
+                    "retrying immediately",
+                    type(exc).__name__, active_index(), entry_count(),
+                )
+                ui.notice(
+                    f"{type(exc).__name__} - switched to credential entry "
+                    f"{active_index()}/{entry_count()}, retrying immediately"
+                )
+                continue
+            wait_attempts += 1
+            if wait_attempts >= RETRY_MAX_ATTEMPTS:
+                raise
+            delay = _retry_delay_seconds(exc, wait_attempts)
             log.warning(
-                "retryable API error %s (attempt %d/%d); retrying in %.1fs",
-                type(exc).__name__, attempt, RETRY_MAX_ATTEMPTS, delay,
+                "retryable API error %s (all credential entries failed); "
+                "waiting %.1fs (wait %d/%d)",
+                type(exc).__name__, delay, wait_attempts, RETRY_MAX_ATTEMPTS - 1,
             )
             if _is_rate_limit(exc):
                 ui.notice(
-                    f"rate limit reached - waiting {delay:.0f}s for the next window "
-                    f"(retry {attempt}/{RETRY_MAX_ATTEMPTS - 1})"
+                    f"rate limit on every credential entry - waiting {delay:.0f}s "
+                    f"for the next window (retry {wait_attempts}/{RETRY_MAX_ATTEMPTS - 1})"
                 )
             else:
                 ui.notice(
-                    f"API {type(exc).__name__} - retry {attempt}/{RETRY_MAX_ATTEMPTS - 1} in {delay:.0f}s"
+                    f"API {type(exc).__name__} - retry {wait_attempts}/{RETRY_MAX_ATTEMPTS - 1} in {delay:.0f}s"
                 )
             time.sleep(delay)
-    raise RuntimeError("unreachable")
 
 
 def _parse_usage(usage_raw) -> dict:

@@ -1,5 +1,6 @@
 # Environment
 .env
+tokens.json
 
 # Saved chat sessions
 chats/
