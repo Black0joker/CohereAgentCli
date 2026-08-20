@@ -88,7 +88,7 @@ def banner(model: str, workspace: str) -> None:
     print(f"{CYAN}{line}{RESET}")
     print(f"{CYAN}{BOLD} Mini AI Coding Agent{RESET}  {GREY}(Cohere {model}){RESET}")
     print(f" {GREY}Workspace:{RESET} {workspace}")
-    print(f" {GREY}Type your request. 'exit' or 'quit' to leave.{RESET}")
+    print(f" {GREY}Type your request. '/help' for chat commands, 'exit' to leave.{RESET}")
     print(f"{CYAN}{line}{RESET}")
 
 
@@ -117,6 +117,31 @@ def error_message(text: str) -> None:
 def notice(text: str) -> None:
     """Short transient status line (e.g. retry notices). Not logging."""
     print(f"\n{YELLOW}{DIM}  {G['ellipsis']} {text}{RESET}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Chat sessions
+# ---------------------------------------------------------------------------
+
+def chat_notice(text: str) -> None:
+    """Feedback line for chat create/switch/remove operations."""
+    print(f"\n{CYAN}{DIM}  {G['usage']} {text}{RESET}", flush=True)
+
+
+def chat_list(chats: list, active: str = None) -> None:
+    """Display saved chats with 1-based positions; mark the active one."""
+    if not chats:
+        print(f"\n{GREY}  no saved chats yet - use /new to start one{RESET}")
+        return
+    print()
+    for i, chat in enumerate(chats, 1):
+        marker = f"{GREEN}{BOLD}*{RESET} " if chat["name"] == active else "  "
+        turns = len(chat.get("messages", []))
+        stamp = chat.get("updated", "")[:16].replace("T", " ")
+        print(
+            f"{marker}{GREY}{i:>2}){RESET} {BOLD}{chat['name']}{RESET}"
+            f" {GREY}{G['pipe']} {turns} msgs {G['pipe']} {stamp}{RESET}"
+        )
 
 
 # ---------------------------------------------------------------------------

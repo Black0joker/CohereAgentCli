@@ -106,13 +106,30 @@ agent ❯ 21
 
 Type `exit` or `quit` to leave.
 
+### Chat sessions
+
+Conversations are persisted automatically (one JSON file per chat under `chats/`,
+git-ignored) and survive restarts. Slash commands manage them:
+
+| Command | Effect |
+|---|---|
+| `/new [name]` | Save the current chat (if it has history) and start a fresh one. Without a name, the chat is auto-named from its first message at first save. |
+| `/chats` | List saved chats, most recent first, with position numbers. The active chat is marked with `*`. |
+| `/switch <ref>` | Switch to a saved chat. `<ref>` is a position number from `/chats`, a full name, or a unique name prefix. The current chat is saved first. |
+| `/remove <ref>` | Delete a saved chat (same `<ref>` rules). Removing the active chat starts a fresh one. |
+| `/help` | Show these commands. |
+
+Chat history (including tool calls/results) is stored verbatim except the system prompt,
+which is re-injected on load.
+
 ## Project structure
 
 Each file has a single responsibility:
 
 | File | Responsibility |
 |---|---|
-| `agent.py` | CLI entry point: bootstrap + interactive REPL |
+| `agent.py` | CLI entry point: bootstrap + interactive REPL + chat commands |
+| `chat_store.py` | Chat session persistence: create / list / load / save / remove (`chats/*.json`) |
 | `config.py` | Configuration constants (model, tokens file, rotation budget, client timeout) |
 | `token_manager.py` | `tokens.json` loading + credential rotation every 18 requests |
 | `system_prompt.py` | OS-aware system prompt (Windows / Linux / macOS) |
